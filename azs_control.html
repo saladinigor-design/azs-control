@@ -102,10 +102,10 @@
   }
 
   .cards-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;}
-  .person-card{border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel-2);}
-  .person-card h3{margin:0 0 8px; font-size:14px;}
-  .person-card ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
-  .mini-task{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; padding:6px 8px; border-radius:6px; background:var(--panel);}
+  .person-card{border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel-2); min-width:0;}
+  .person-card h3{margin:0 0 8px; font-size:14px; overflow-wrap:anywhere;}
+  .person-card ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; min-width:0;}
+  .mini-task{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; padding:6px 8px; border-radius:6px; background:var(--panel); min-width:0;}
   .mini-task .t{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
   .chip{
@@ -139,11 +139,6 @@
   table.data-table{width:100%; border-collapse:collapse; font-size:12.5px;}
   table.data-table th, table.data-table td{padding:7px 8px; border-bottom:1px solid var(--border); text-align:left;}
   table.data-table th{color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase;}
-  table.data-table input[type="text"]{
-    width:100%; min-width:120px; padding:6px 8px; border-radius:6px; border:1px solid var(--border);
-    background:var(--panel-2); color:var(--text); font-size:12.5px;
-  }
-  table.data-table td.save-cell{white-space:nowrap;}
   .table-scroll{overflow-x:auto;}
 
   .filters{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px;}
@@ -155,14 +150,16 @@
 
   .task-list{display:flex; flex-direction:column; gap:6px;}
   .task-row{
-    display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px;
+    display:flex; flex-direction:column; gap:6px; padding:9px 10px; border-radius:8px;
     background:var(--panel-2); border:1px solid var(--border); position:relative;
   }
+  .task-row-top{display:flex; align-items:center; gap:10px;}
   .task-row .title{flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .task-row-bottom{display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px;}
   .task-row .meta{font-size:11.5px; color:var(--muted); white-space:nowrap;}
   .task-row .wa-btn{
     border:1px solid #12b98655; background:#12b98622; color:#0d8f68; border-radius:7px;
-    padding:5px 9px; font-size:11.5px; cursor:pointer; white-space:nowrap;
+    padding:5px 9px; font-size:11.5px; cursor:pointer; white-space:nowrap; margin-left:auto;
   }
   :root[data-theme="dark"] .task-row .wa-btn{ color:#5ee7b8; }
   .task-row[title]:hover::after{
@@ -189,9 +186,29 @@
   .form-msg{font-size:11.5px; color:var(--st-closed); min-height:14px;}
 
   footer{color:var(--muted); font-size:11.5px; text-align:center; padding:10px 0 26px;}
+
   @media (max-width:640px){
-    .station-row{grid-template-columns:80px 1fr 36px;}
-    header.topbar h1{font-size:15px;}
+    main{padding:12px; gap:16px;}
+    section{padding:14px; border-radius:10px;}
+    header.topbar{padding:10px 12px; gap:8px;}
+    header.topbar h1{font-size:14.5px;}
+    header.topbar .sub{font-size:11px;}
+    .theme-btn{font-size:12px; padding:8px 10px; white-space:nowrap;}
+    .tiles{grid-template-columns:repeat(2,1fr); gap:8px;}
+    .tile{padding:10px 12px;}
+    .tile .val{font-size:19px;}
+    .struct-grid, .cards-grid{grid-template-columns:1fr;}
+    .station-row{grid-template-columns:72px 1fr 60px; gap:6px;}
+    .filters{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+    .filters select{width:100%;}
+    .chip{padding:5px 10px; font-size:12px;}
+    .task-row .wa-btn{padding:7px 11px; font-size:12px;}
+    form.entry-form button{padding:10px 12px;}
+    table.data-table{font-size:11.5px;}
+  }
+  @media (max-width:420px){
+    .tiles{grid-template-columns:1fr 1fr;}
+    header.topbar{flex-wrap:wrap;}
   }
 </style>
 </head>
@@ -219,12 +236,7 @@
 
   <section id="shiftsSection">
     <h2>Сотрудники смен <span class="count" id="shiftsCount"></span></h2>
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead><tr><th>Станция</th><th>Смена</th><th>ФИО</th><th>Телефон</th><th></th></tr></thead>
-        <tbody id="shiftsBody"></tbody>
-      </table>
-    </div>
+    <div class="struct-grid" id="shiftsGrid"></div>
   </section>
 
   <section id="peopleSection">
@@ -660,15 +672,18 @@
       return sa.name.localeCompare(sb.name) || a.type.localeCompare(b.type);
     });
     $('#shiftsCount').textContent = '(' + rows.length + ')';
-    $('#shiftsBody').innerHTML = rows.map(sh=>{
+    $('#shiftsGrid').innerHTML = rows.map(sh=>{
       const st = state.stations.find(s=>s.id===sh.stationId) || {name:'—'};
-      return `<tr>
-        <td>${esc(st.name)}</td>
-        <td>${sh.type==='day' ? 'Дневная' : 'Ночная'}</td>
-        <td><input type="text" class="shift-name" data-id="${sh.id}" value="${esc(sh.employeeName)}" placeholder="ФИО"></td>
-        <td><input type="text" class="shift-phone" data-id="${sh.id}" value="${esc(sh.employeePhone)}" placeholder="Телефон"></td>
-        <td class="save-cell"><button type="button" class="theme-btn shift-save" data-id="${sh.id}" style="padding:6px 9px;">💾</button></td>
-      </tr>`;
+      return `<div class="struct-card">
+        <div class="role">${esc(st.name)} · ${sh.type==='day' ? 'дневная смена' : 'ночная смена'}</div>
+        <div class="edit-row">
+          <input type="text" class="shift-name" data-id="${sh.id}" value="${esc(sh.employeeName)}" placeholder="ФИО">
+        </div>
+        <div class="edit-row">
+          <input type="text" class="shift-phone" data-id="${sh.id}" value="${esc(sh.employeePhone)}" placeholder="Телефон">
+          <button type="button" class="theme-btn shift-save" data-id="${sh.id}" style="padding:6px 9px;">💾</button>
+        </div>
+      </div>`;
     }).join('');
     document.querySelectorAll('.shift-save').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -810,11 +825,16 @@
       const wa = waLink(r.phone, r.name, r.task, r.scope);
       const tip = `Постановка: ${fmtDT(r.task.createdAt)}\nОтветственный: ${r.name||'—'}\nСрок: ${fmtDT(r.task.deadline)}`;
       return `<div class="task-row" title="${esc(tip)}">
-        <span class="title">${esc(r.task.title)}</span>
-        <span class="meta">${esc(r.scope)}</span>
-        <span class="meta">до ${fmtDT(r.task.deadline)}</span>
-        <span class="chip ${st}" data-taskid="${r.task.id}">${STAGE_LABEL[st]}</span>
-        ${wa ? `<button type="button" class="wa-btn" data-walink="${encodeURIComponent(wa)}">💬 WhatsApp</button>` : ''}
+        <div class="task-row-top">
+          <span class="title">${esc(r.task.title)}</span>
+          <span class="chip ${st}" data-taskid="${r.task.id}">${STAGE_LABEL[st]}</span>
+        </div>
+        <div class="task-row-bottom">
+          <span class="meta">${esc(r.scope)}</span>
+          <span class="meta">👤 ${esc(r.name || '—')}</span>
+          <span class="meta">до ${fmtDT(r.task.deadline)}</span>
+          ${wa ? `<button type="button" class="wa-btn" data-walink="${encodeURIComponent(wa)}">💬 WhatsApp</button>` : ''}
+        </div>
       </div>`;
     }).join('');
 
