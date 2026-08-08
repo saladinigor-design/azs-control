@@ -94,8 +94,9 @@
   .struct-card .role{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);}
   .struct-card .name{font-weight:600; margin:2px 0 6px;}
   .struct-card .stations{font-size:12.5px; color:var(--muted); margin-bottom:8px;}
-  .phone-row{display:flex; gap:6px; align-items:center;}
-  .phone-row input{
+  .phone-row, .edit-row{display:flex; gap:6px; align-items:center; margin-top:6px;}
+  .phone-row:first-of-type, .edit-row:first-of-type{margin-top:0;}
+  .phone-row input, .edit-row input{
     flex:1; min-width:0; padding:6px 8px; border-radius:6px; border:1px solid var(--border);
     background:var(--panel); color:var(--text); font-size:12.5px;
   }
@@ -138,6 +139,11 @@
   table.data-table{width:100%; border-collapse:collapse; font-size:12.5px;}
   table.data-table th, table.data-table td{padding:7px 8px; border-bottom:1px solid var(--border); text-align:left;}
   table.data-table th{color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase;}
+  table.data-table input[type="text"]{
+    width:100%; min-width:120px; padding:6px 8px; border-radius:6px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); font-size:12.5px;
+  }
+  table.data-table td.save-cell{white-space:nowrap;}
   .table-scroll{overflow-x:auto;}
 
   .filters{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px;}
@@ -209,6 +215,16 @@
   <section id="structSection">
     <h2>Структура контроля <span class="count" id="structCount"></span></h2>
     <div class="struct-grid" id="structGrid"></div>
+  </section>
+
+  <section id="shiftsSection">
+    <h2>Сотрудники смен <span class="count" id="shiftsCount"></span></h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Станция</th><th>Смена</th><th>ФИО</th><th>Телефон</th><th></th></tr></thead>
+        <tbody id="shiftsBody"></tbody>
+      </table>
+    </div>
   </section>
 
   <section id="peopleSection">
@@ -374,6 +390,12 @@
     const d = new Date(iso);
     if(isNaN(d)) return '—';
     return d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }
+
+  function esc(s){
+    return String(s==null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   /* ---------- checklist templates ---------- */
@@ -552,11 +574,11 @@
     return out;
   }
 
-  function waLink(phone, task, scope){
+  function waLink(phone, name, task, scope){
     if(!phone) return null;
     const digits = phone.replace(/\D/g,'');
     const status = STAGE_LABEL[displayStatus(task)];
-    const text = `Задача: ${task.title}\nСтанция/зона: ${scope||task.scopeLabel||'—'}\nОтветственный: ${task.responsibleName||'—'}\nСрок: ${fmtDT(task.deadline)}\nСтатус: ${status}`;
+    const text = `Задача: ${task.title}\nСтанция/зона: ${scope||task.scopeLabel||'—'}\nОтветственный: ${name||'—'}\nСрок: ${fmtDT(task.deadline)}\nСтатус: ${status}`;
     return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
   }
 
@@ -595,31 +617,68 @@
   function renderStruct(){
     const cards = [];
     cards.push({role:'Начальник торгового отдела', name:state.head.name, phone:state.head.phone,
-      stations:'Курирует всех товароведов по сети (' + state.stations.length + ' АЗС)', onSave:v=>state.head.phone=v});
+      stations:'Курирует всех товароведов по сети (' + state.stations.length + ' АЗС)',
+      onSave:(name,phone)=>{ state.head.name=name; state.head.phone=phone; }});
     state.managers.forEach(m=>{
       const names = m.stations.map(id=>(state.stations.find(s=>s.id===id)||{}).name).filter(Boolean).join(', ');
-      cards.push({role:'Менеджер', name:m.name, phone:m.phone, stations: names||'—', onSave:v=>m.phone=v});
+      cards.push({role:'Менеджер', name:m.name, phone:m.phone, stations: names||'—',
+        onSave:(name,phone)=>{ m.name=name; m.phone=phone; }});
     });
     state.merchandisers.forEach(m=>{
       const names = m.stations.map(id=>(state.stations.find(s=>s.id===id)||{}).name).filter(Boolean).join(', ');
-      cards.push({role:'Товаровед', name:m.name, phone:m.phone, stations: names||'—', onSave:v=>m.phone=v});
+      cards.push({role:'Товаровед', name:m.name, phone:m.phone, stations: names||'—',
+        onSave:(name,phone)=>{ m.name=name; m.phone=phone; }});
     });
     $('#structCount').textContent = '(' + cards.length + ')';
     $('#structGrid').innerHTML = cards.map((c,i)=>`
       <div class="struct-card">
-        <div class="role">${c.role}</div>
-        <div class="name">${c.name}</div>
-        <div class="stations">${c.stations}</div>
-        <div class="phone-row">
-          <input type="text" value="${c.phone}" data-idx="${i}" class="struct-phone">
-          <button class="theme-btn" data-savephone="${i}" style="padding:6px 9px;">💾</button>
+        <div class="role">${esc(c.role)}</div>
+        <div class="stations">${esc(c.stations)}</div>
+        <div class="edit-row">
+          <input type="text" value="${esc(c.name)}" data-idx="${i}" class="struct-name" placeholder="ФИО">
+        </div>
+        <div class="edit-row">
+          <input type="text" value="${esc(c.phone)}" data-idx="${i}" class="struct-phone" placeholder="Телефон">
+          <button class="theme-btn" data-savestruct="${i}" style="padding:6px 9px;">💾</button>
         </div>
       </div>`).join('');
     cards.forEach((c,i)=>{
-      const btn = document.querySelector(`[data-savephone="${i}"]`);
+      const btn = document.querySelector(`[data-savestruct="${i}"]`);
       if(btn) btn.addEventListener('click', ()=>{
-        const input = document.querySelector(`.struct-phone[data-idx="${i}"]`);
-        c.onSave(input.value.trim());
+        const nameInput = document.querySelector(`.struct-name[data-idx="${i}"]`);
+        const phoneInput = document.querySelector(`.struct-phone[data-idx="${i}"]`);
+        c.onSave(nameInput.value.trim(), phoneInput.value.trim());
+        renderAll();
+      });
+    });
+  }
+
+  function renderShifts(){
+    const rows = state.shifts.slice().sort((a,b)=>{
+      const sa = state.stations.find(s=>s.id===a.stationId) || {name:''};
+      const sb = state.stations.find(s=>s.id===b.stationId) || {name:''};
+      return sa.name.localeCompare(sb.name) || a.type.localeCompare(b.type);
+    });
+    $('#shiftsCount').textContent = '(' + rows.length + ')';
+    $('#shiftsBody').innerHTML = rows.map(sh=>{
+      const st = state.stations.find(s=>s.id===sh.stationId) || {name:'—'};
+      return `<tr>
+        <td>${esc(st.name)}</td>
+        <td>${sh.type==='day' ? 'Дневная' : 'Ночная'}</td>
+        <td><input type="text" class="shift-name" data-id="${sh.id}" value="${esc(sh.employeeName)}" placeholder="ФИО"></td>
+        <td><input type="text" class="shift-phone" data-id="${sh.id}" value="${esc(sh.employeePhone)}" placeholder="Телефон"></td>
+        <td class="save-cell"><button type="button" class="theme-btn shift-save" data-id="${sh.id}" style="padding:6px 9px;">💾</button></td>
+      </tr>`;
+    }).join('');
+    document.querySelectorAll('.shift-save').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-id');
+        const sh = state.shifts.find(s=>s.id===id);
+        if(!sh) return;
+        const nameInput = document.querySelector(`.shift-name[data-id="${id}"]`);
+        const phoneInput = document.querySelector(`.shift-phone[data-id="${id}"]`);
+        sh.employeeName = nameInput.value.trim();
+        sh.employeePhone = phoneInput.value.trim();
         renderAll();
       });
     });
@@ -628,17 +687,17 @@
   function miniTaskHTML(t){
     const st = displayStatus(t);
     return `<li class="mini-task">
-      <span class="t" title="${t.title}">${t.title}</span>
+      <span class="t" title="${esc(t.title)}">${esc(t.title)}</span>
       <span class="chip ${st}" data-taskid="${t.id}">${STAGE_LABEL[st]}</span>
     </li>`;
   }
 
   function renderPeople(){
     let html = '';
-    html += `<div class="person-card"><h3>🧭 ${state.head.name} — начальник торгового отдела</h3>
+    html += `<div class="person-card"><h3>🧭 ${esc(state.head.name)} — начальник торгового отдела</h3>
       <ul>${state.headTasks.map(miniTaskHTML).join('')}</ul></div>`;
     state.managers.forEach(m=>{
-      html += `<div class="person-card"><h3>🧑‍💼 ${m.name} — менеджер</h3>
+      html += `<div class="person-card"><h3>🧑‍💼 ${esc(m.name)} — менеджер</h3>
         <ul>${(state.managerTasks[m.id]||[]).map(miniTaskHTML).join('')}</ul></div>`;
     });
     $('#peopleGrid').innerHTML = html;
@@ -660,7 +719,7 @@
 
     $('#chartView').innerHTML = rows.map(r=>`
       <div class="station-row">
-        <div>${r.name}</div>
+        <div>${esc(r.name)}</div>
         <div class="bar-stack">
           <div class="bar-track"><div class="bar-fill op" style="width:${r.opPct}%"></div></div>
           <div class="bar-track"><div class="bar-fill merch" style="width:${r.merchPct}%"></div></div>
@@ -671,7 +730,7 @@
     $('#tableView').innerHTML = `
       <table class="data-table">
         <thead><tr><th>Станция</th><th>Состояние АЗС</th><th>Товароведческий</th></tr></thead>
-        <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.opPct}%</td><td>${r.merchPct}%</td></tr>`).join('')}</tbody>
+        <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.opPct}%</td><td>${r.merchPct}%</td></tr>`).join('')}</tbody>
       </table>`;
 
     $('#chartView').style.display = chartView==='chart' ? '' : 'none';
@@ -691,12 +750,12 @@
   function populateFilterDropdowns(){
     const fController = $('#fController');
     const curController = fController.value || 'all';
-    fController.innerHTML = controllerOptions().map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+    fController.innerHTML = controllerOptions().map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
     fController.value = curController;
 
     const fStation = $('#fStation');
     const curStation = fStation.value || 'all';
-    fStation.innerHTML = '<option value="all">Все</option>' + state.stations.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    fStation.innerHTML = '<option value="all">Все</option>' + state.stations.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
     fStation.value = curStation;
   }
 
@@ -717,16 +776,17 @@
       } else {
         if(shiftF!=='all') return; // merch checklist has no shift
         if(controller!=='all' && controller!==('mc:'+g.controllerId)) return;
-        g.tasks.forEach(t=> rows.push({task:t, scope:g.stationName, phone:t.responsiblePhone, name:t.responsibleName}));
+        const mc = state.merchandisers.find(m=>m.id===g.controllerId);
+        g.tasks.forEach(t=> rows.push({task:t, scope:g.stationName, phone:mc?mc.phone:'', name:mc?mc.name:''}));
       }
     });
 
     if(controller==='all' || controller==='head:1'){
-      state.headTasks.forEach(t=> rows.push({task:t, scope:'Сеть (начальник торгового отдела)', phone:t.responsiblePhone, name:t.responsibleName}));
+      state.headTasks.forEach(t=> rows.push({task:t, scope:'Сеть (начальник торгового отдела)', phone:state.head.phone, name:state.head.name}));
     }
     state.managers.forEach(m=>{
       if(controller!=='all' && controller!==('mgr:'+m.id)) return;
-      (state.managerTasks[m.id]||[]).forEach(t=> rows.push({task:t, scope:'Менеджер: '+m.name, phone:t.responsiblePhone, name:t.responsibleName}));
+      (state.managerTasks[m.id]||[]).forEach(t=> rows.push({task:t, scope:'Менеджер: '+m.name, phone:m.phone, name:m.name}));
     });
 
     rows = rows.filter(r=>{
@@ -747,11 +807,11 @@
 
     $('#checklistList').innerHTML = rows.map(r=>{
       const st = displayStatus(r.task);
-      const wa = waLink(r.phone, r.task, r.scope);
+      const wa = waLink(r.phone, r.name, r.task, r.scope);
       const tip = `Постановка: ${fmtDT(r.task.createdAt)}\nОтветственный: ${r.name||'—'}\nСрок: ${fmtDT(r.task.deadline)}`;
-      return `<div class="task-row" title="${tip}">
-        <span class="title">${r.task.title}</span>
-        <span class="meta">${r.scope}</span>
+      return `<div class="task-row" title="${esc(tip)}">
+        <span class="title">${esc(r.task.title)}</span>
+        <span class="meta">${esc(r.scope)}</span>
         <span class="meta">до ${fmtDT(r.task.deadline)}</span>
         <span class="chip ${st}" data-taskid="${r.task.id}">${STAGE_LABEL[st]}</span>
         ${wa ? `<button type="button" class="wa-btn" data-walink="${encodeURIComponent(wa)}">💬 WhatsApp</button>` : ''}
@@ -774,13 +834,13 @@
 
   function populateFormDropdowns(){
     const sfManager = $('#sf_manager');
-    sfManager.innerHTML = state.managers.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+    sfManager.innerHTML = state.managers.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
     const sfMerch = $('#sf_merch');
-    sfMerch.innerHTML = state.merchandisers.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+    sfMerch.innerHTML = state.merchandisers.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
 
     const hfStation = $('#hf_station');
     const curHf = hfStation.value;
-    hfStation.innerHTML = state.stations.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    hfStation.innerHTML = state.stations.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
     if(curHf) hfStation.value = curHf;
 
     updateAssignPersonOptions();
@@ -792,7 +852,7 @@
     let opts = [];
     if(role==='shift'){
       opts = state.shifts.map(s=>{
-        const st = state.stations.find(x=>x.id===s.stationId);
+        const st = state.stations.find(x=>x.id===s.stationId) || {name:'—'};
         return {v:s.id, l:`${s.employeeName} (${st.name}, ${s.type==='day'?'день':'ночь'})`};
       });
     } else if(role==='merch'){
@@ -802,7 +862,7 @@
     } else {
       opts = [{v:'head', l:state.head.name}];
     }
-    sel.innerHTML = opts.map(o=>`<option value="${o.v}">${o.l}</option>`).join('');
+    sel.innerHTML = opts.map(o=>`<option value="${o.v}">${esc(o.l)}</option>`).join('');
   }
 
   function defaultDeadlineLocal(){
@@ -815,6 +875,7 @@
   function renderAll(){
     renderTiles();
     renderStruct();
+    renderShifts();
     renderPeople();
     renderChart();
     renderChecklist();
