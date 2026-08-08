@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Контроль задач сети АЗС</title>
+<style>
+  :root{
+    --bg:#f4f6f8;
+    --panel:#ffffff;
+    --panel-2:#eef1f5;
+    --text:#1c2530;
+    --muted:#5b6774;
+    --border:#dde3ea;
+    --accent:#2563eb;
+    --accent-2:#1d4ed8;
+    --shadow: 0 1px 3px rgba(20,30,45,.08), 0 1px 2px rgba(20,30,45,.06);
+
+    --st-control:#5b6774;
+    --st-control-bg:#e7eaee;
+    --st-confirm:#a15c00;
+    --st-confirm-bg:#fbe6c8;
+    --st-review:#5b3aa8;
+    --st-review-bg:#e9e0fa;
+    --st-closed:#146c3a;
+    --st-closed-bg:#d8f1e2;
+    --st-overdue:#b3261e;
+    --st-overdue-bg:#fbdada;
+  }
+  :root[data-theme="dark"]{
+    --bg:#12161c;
+    --panel:#1a2028;
+    --panel-2:#212934;
+    --text:#e7ecf2;
+    --muted:#9aa7b5;
+    --border:#2b3542;
+    --accent:#5b9dff;
+    --accent-2:#7db0ff;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+
+    --st-control:#a9b4c0;
+    --st-control-bg:#2a323d;
+    --st-confirm:#f0b862;
+    --st-confirm-bg:#3a2f18;
+    --st-review:#c3aef5;
+    --st-review-bg:#2f2748;
+    --st-closed:#7fdba4;
+    --st-closed-bg:#173a28;
+    --st-overdue:#ff9c94;
+    --st-overdue-bg:#4a1d1a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]):not([data-theme="dark"]){
+      --bg:#12161c;--panel:#1a2028;--panel-2:#212934;--text:#e7ecf2;--muted:#9aa7b5;--border:#2b3542;
+      --accent:#5b9dff;--accent-2:#7db0ff;
+      --st-control:#a9b4c0;--st-control-bg:#2a323d;
+      --st-confirm:#f0b862;--st-confirm-bg:#3a2f18;
+      --st-review:#c3aef5;--st-review-bg:#2f2748;
+      --st-closed:#7fdba4;--st-closed-bg:#173a28;
+      --st-overdue:#ff9c94;--st-overdue-bg:#4a1d1a;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.4;
+  }
+  header.topbar{
+    position:sticky; top:0; z-index:20;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px; padding:14px 20px; background:var(--panel);
+    border-bottom:1px solid var(--border);
+  }
+  header.topbar h1{font-size:18px; margin:0;}
+  header.topbar .sub{color:var(--muted); font-size:12.5px;}
+  .theme-btn{
+    border:1px solid var(--border); background:var(--panel-2); color:var(--text);
+    border-radius:8px; padding:8px 12px; cursor:pointer; font-size:13px;
+  }
+  main{max-width:1280px; margin:0 auto; padding:20px; display:flex; flex-direction:column; gap:22px;}
+  section{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; box-shadow:var(--shadow);}
+  section > h2{margin:0 0 14px 0; font-size:15px; display:flex; align-items:center; gap:8px;}
+  section > h2 .count{color:var(--muted); font-weight:400; font-size:12.5px;}
+
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px;}
+  .tile{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px;}
+  .tile .val{font-size:22px; font-weight:700;}
+  .tile .lbl{font-size:12px; color:var(--muted); margin-top:2px;}
+  .tile.warn .val{color:var(--st-overdue);}
+
+  .struct-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px;}
+  .struct-card{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px;}
+  .struct-card .role{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);}
+  .struct-card .name{font-weight:600; margin:2px 0 6px;}
+  .struct-card .stations{font-size:12.5px; color:var(--muted); margin-bottom:8px;}
+  .phone-row{display:flex; gap:6px; align-items:center;}
+  .phone-row input{
+    flex:1; min-width:0; padding:6px 8px; border-radius:6px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); font-size:12.5px;
+  }
+
+  .cards-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;}
+  .person-card{border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel-2);}
+  .person-card h3{margin:0 0 8px; font-size:14px;}
+  .person-card ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .mini-task{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; padding:6px 8px; border-radius:6px; background:var(--panel);}
+  .mini-task .t{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  .chip{
+    display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+    padding:3px 9px; border-radius:999px; white-space:nowrap; cursor:pointer; border:none;
+  }
+  .chip.control{color:var(--st-control); background:var(--st-control-bg);}
+  .chip.confirm{color:var(--st-confirm); background:var(--st-confirm-bg);}
+  .chip.review{color:var(--st-review); background:var(--st-review-bg);}
+  .chip.closed{color:var(--st-closed); background:var(--st-closed-bg);}
+  .chip.overdue{color:var(--st-overdue); background:var(--st-overdue-bg);}
+
+  .view-toggle{display:flex; gap:6px; margin-bottom:12px;}
+  .view-toggle button{
+    border:1px solid var(--border); background:var(--panel-2); color:var(--text);
+    padding:6px 12px; border-radius:7px; cursor:pointer; font-size:12.5px;
+  }
+  .view-toggle button.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+
+  .station-row{display:grid; grid-template-columns:110px 1fr 44px; gap:10px; align-items:center; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border);}
+  .station-row:last-child{border-bottom:none;}
+  .bar-stack{display:flex; flex-direction:column; gap:3px;}
+  .bar-track{background:var(--panel-2); border-radius:4px; height:9px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:4px;}
+  .bar-fill.op{background:var(--accent);}
+  .bar-fill.merch{background:#12b886;}
+  .legend{display:flex; gap:14px; font-size:12px; color:var(--muted); margin-bottom:10px;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+
+  table.data-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.data-table th, table.data-table td{padding:7px 8px; border-bottom:1px solid var(--border); text-align:left;}
+  table.data-table th{color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase;}
+  .table-scroll{overflow-x:auto;}
+
+  .filters{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px;}
+  .filters select, .filters input{
+    padding:7px 9px; border-radius:7px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); font-size:12.5px;
+  }
+  .filters label{display:flex; flex-direction:column; gap:3px; font-size:11px; color:var(--muted);}
+
+  .task-list{display:flex; flex-direction:column; gap:6px;}
+  .task-row{
+    display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px;
+    background:var(--panel-2); border:1px solid var(--border); position:relative;
+  }
+  .task-row .title{flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .task-row .meta{font-size:11.5px; color:var(--muted); white-space:nowrap;}
+  .task-row .wa-btn{
+    border:1px solid #12b98655; background:#12b98622; color:#0d8f68; border-radius:7px;
+    padding:5px 9px; font-size:11.5px; cursor:pointer; white-space:nowrap;
+  }
+  :root[data-theme="dark"] .task-row .wa-btn{ color:#5ee7b8; }
+  .task-row[title]:hover::after{
+    content: attr(title);
+    position:absolute; left:0; top:100%; margin-top:4px; z-index:10;
+    background:var(--text); color:var(--bg); padding:8px 10px; border-radius:8px;
+    font-size:11.5px; white-space:pre-line; box-shadow:var(--shadow); max-width:340px;
+  }
+  .empty-note{color:var(--muted); font-size:12.5px; padding:10px 0;}
+
+  .forms-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px;}
+  form.entry-form{border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel-2); display:flex; flex-direction:column; gap:8px;}
+  form.entry-form h3{margin:0 0 2px; font-size:13.5px;}
+  form.entry-form label{font-size:11.5px; color:var(--muted); display:flex; flex-direction:column; gap:3px;}
+  form.entry-form input, form.entry-form select{
+    padding:7px 9px; border-radius:7px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); font-size:12.5px;
+  }
+  form.entry-form button{
+    margin-top:4px; border:none; background:var(--accent); color:#fff; padding:8px 12px;
+    border-radius:7px; cursor:pointer; font-size:12.5px; font-weight:600;
+  }
+  form.entry-form button:hover{background:var(--accent-2);}
+  .form-msg{font-size:11.5px; color:var(--st-closed); min-height:14px;}
+
+  footer{color:var(--muted); font-size:11.5px; text-align:center; padding:10px 0 26px;}
+  @media (max-width:640px){
+    .station-row{grid-template-columns:80px 1fr 36px;}
+    header.topbar h1{font-size:15px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>🛢️ Контроль выполнения задач — сеть АЗС</h1>
+    <div class="sub">Дашборд руководителя · данные хранятся в памяти браузера</div>
+  </div>
+  <button class="theme-btn" id="themeToggle" type="button">🌙 Тёмная тема</button>
+</header>
+
+<main>
+
+  <section id="tilesSection">
+    <h2>Сводные показатели</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section id="structSection">
+    <h2>Структура контроля <span class="count" id="structCount"></span></h2>
+    <div class="struct-grid" id="structGrid"></div>
+  </section>
+
+  <section id="peopleSection">
+    <h2>Задачи менеджеров и начальника торгового отдела</h2>
+    <div class="cards-grid" id="peopleGrid"></div>
+  </section>
+
+  <section id="chartSection">
+    <h2>Выполнение по станциям</h2>
+    <div class="view-toggle">
+      <button id="viewChartBtn" class="active" type="button">📊 График</button>
+      <button id="viewTableBtn" type="button">📋 Таблица</button>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i> Чек-лист состояния АЗС</span>
+      <span><i style="background:#12b886"></i> Товароведческий чек-лист</span>
+    </div>
+    <div id="chartView"></div>
+    <div id="tableView" class="table-scroll" style="display:none"></div>
+  </section>
+
+  <section id="checklistSection">
+    <h2>Чек-листы по станциям <span class="count" id="checklistCount"></span></h2>
+    <div class="filters">
+      <label>Контролёр
+        <select id="fController"><option value="all">Все</option></select>
+      </label>
+      <label>Станция
+        <select id="fStation"><option value="all">Все</option></select>
+      </label>
+      <label>Смена
+        <select id="fShift">
+          <option value="all">Все</option>
+          <option value="day">Дневная</option>
+          <option value="night">Ночная</option>
+        </select>
+      </label>
+      <label>Статус
+        <select id="fStatus">
+          <option value="all">Все</option>
+          <option value="active">В работе</option>
+          <option value="closed">Закрыто</option>
+          <option value="overdue">Просрочено</option>
+        </select>
+      </label>
+    </div>
+    <div class="task-list" id="checklistList"></div>
+  </section>
+
+  <section id="formsSection">
+    <h2>Управление сетью</h2>
+    <div class="forms-grid">
+      <form class="entry-form" id="assignForm">
+        <h3>👤 Поставить задачу сотруднику</h3>
+        <label>Роль
+          <select id="af_role">
+            <option value="shift">Сотрудник смены</option>
+            <option value="merch">Товаровед</option>
+            <option value="manager">Менеджер</option>
+            <option value="head">Начальник торгового отдела</option>
+          </select>
+        </label>
+        <label>Сотрудник
+          <select id="af_person"></select>
+        </label>
+        <label>Название задачи
+          <input type="text" id="af_title" placeholder="Например: подготовить сверку по станции" required>
+        </label>
+        <label>Срок выполнения
+          <input type="datetime-local" id="af_deadline" required>
+        </label>
+        <button type="submit">Поставить задачу</button>
+        <div class="form-msg" id="af_msg"></div>
+      </form>
+
+      <form class="entry-form" id="stationForm">
+        <h3>⛽ Добавить АЗС</h3>
+        <label>Название
+          <input type="text" id="sf_name" placeholder="АЗС №8" required>
+        </label>
+        <label>Адрес
+          <input type="text" id="sf_address" placeholder="г. Алматы, ..." required>
+        </label>
+        <label>Менеджер
+          <select id="sf_manager"></select>
+        </label>
+        <label>Товаровед
+          <select id="sf_merch"></select>
+        </label>
+        <button type="submit">Добавить станцию</button>
+        <div class="form-msg" id="sf_msg"></div>
+      </form>
+
+      <form class="entry-form" id="shiftForm">
+        <h3>🕒 Добавить смену</h3>
+        <label>Станция
+          <select id="hf_station"></select>
+        </label>
+        <label>Тип смены
+          <select id="hf_type">
+            <option value="day">Дневная</option>
+            <option value="night">Ночная</option>
+          </select>
+        </label>
+        <label>ФИО сотрудника
+          <input type="text" id="hf_name" placeholder="Иванов Иван Иванович" required>
+        </label>
+        <label>Телефон
+          <input type="text" id="hf_phone" placeholder="+7 7__ ___ __ __" required>
+        </label>
+        <button type="submit">Добавить смену</button>
+        <div class="form-msg" id="hf_msg"></div>
+      </form>
+
+      <form class="entry-form" id="templateForm">
+        <h3>📝 Добавить задачу в шаблон чек-листа</h3>
+        <label>Тип чек-листа
+          <select id="tf_type">
+            <option value="shift">Состояние АЗС (смена)</option>
+            <option value="merch">Товароведческий</option>
+            <option value="manager">Менеджера</option>
+            <option value="head">Начальника торгового отдела</option>
+          </select>
+        </label>
+        <label>Название новой задачи
+          <input type="text" id="tf_title" placeholder="Новый пункт чек-листа" required>
+        </label>
+        <button type="submit">Добавить в шаблон</button>
+        <div class="form-msg" id="tf_msg"></div>
+      </form>
+    </div>
+  </section>
+
+  <footer>Прототип без сервера · все данные сбрасываются при перезагрузке страницы · v1.0</footer>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- seeded RNG for reproducible demo data ---------- */
+  function mulberry32(a){
+    return function(){
+      a|=0; a=a+0x6D2B79F5|0;
+      let t=Math.imul(a^a>>>15,1|a);
+      t=t+Math.imul(t^t>>>7,61|t)^t;
+      return ((t^t>>>14)>>>0)/4294967296;
+    };
+  }
+  const rng = mulberry32(20260808);
+  function randInt(min,max){ return Math.floor(rng()*(max-min+1))+min; }
+  function pick(arr){ return arr[randInt(0,arr.length-1)]; }
+  const STAGES = ['control','confirm','review','closed'];
+  const STAGE_LABEL = {control:'Контроль', confirm:'Подтверждение', review:'Проверка', closed:'Закрытие', overdue:'Просрочено'};
+
+  let uidSeq = 1;
+  function uid(prefix){ return prefix + (uidSeq++); }
+
+  function nowISO(){ return new Date().toISOString(); }
+  function addHours(date, h){ return new Date(date.getTime() + h*3600*1000); }
+
+  function fmtDT(iso){
+    const d = new Date(iso);
+    if(isNaN(d)) return '—';
+    return d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }
+
+  /* ---------- checklist templates ---------- */
+  const templates = {
+    shift: [
+      'Приём смены и пересчёт кассы','Уборка территории','Чистота торгового зала и туалета',
+      'Исправность ТРК и показания счётчиков','Контроль остатков топлива','Приём топлива от бензовоза',
+      'Инкассация выручки','Кассовая дисциплина и чеки ККТ','Противопожарное оборудование',
+      'Заполнение журналов и передача отчёта'
+    ],
+    merch: [
+      'Наличие товарного ассортимента','Отчёт по реализации товаров','Ценники на товар',
+      'Сроки годности продукции','Выкладка товара','Промо-материалы и рекламные стойки'
+    ],
+    manager: [
+      'Отчёт по реализации топлива за смену','Отчёт по реализации сопутствующих товаров',
+      'Контроль выполнения чек-листов состояния АЗС по закреплённым станциям','Сверка выручки и инкассации по станциям'
+    ],
+    head: [
+      'Контроль заявок на пополнение ассортимента — Товаровед 1',
+      'Контроль заявок на пополнение ассортимента — Товаровед 2',
+      'Контроль заявок на пополнение ассортимента — Товаровед 3',
+      'Контроль соблюдения графика поставок поставщиками',
+      'Проверка качества и комплектности поставок',
+      'Контроль документооборота и оплаты поставщикам'
+    ]
+  };
+
+  function makeTask(title, opts){
+    opts = opts || {};
+    const created = new Date();
+    const offsetH = (opts.offsetH!==undefined) ? opts.offsetH : randInt(-40,40);
+    const deadline = addHours(created, offsetH);
+    const stage = opts.stage || pick(STAGES);
+    return {
+      id: uid('t'),
+      title: title,
+      stage: stage,
+      createdAt: created.toISOString(),
+      deadline: deadline.toISOString(),
+      responsibleName: opts.responsibleName || '',
+      responsiblePhone: opts.responsiblePhone || '',
+      scopeLabel: opts.scopeLabel || ''
+    };
+  }
+
+  function seedTasks(titles, ctxFn){
+    return titles.map(title => makeTask(title, ctxFn(title)));
+  }
+
+  /* ---------- core entities ---------- */
+  const state = {
+    head: { name:'Нурланов Асхат Серикович', phone:'+7 701 666 77 88' },
+    managers: [
+      { id:'mgr1', name:'Ахметов Ержан', phone:'+7 701 111 22 33', stations:['st1','st2','st3','st4'] },
+      { id:'mgr2', name:'Сериков Данияр', phone:'+7 701 222 33 44', stations:['st5','st6','st7'] }
+    ],
+    merchandisers: [
+      { id:'mc1', name:'Смагулова Айгерим', phone:'+7 701 333 44 55', stations:['st1','st2','st3'] },
+      { id:'mc2', name:'Оспанов Бауыржан', phone:'+7 701 444 55 66', stations:['st4','st5'] },
+      { id:'mc3', name:'Ким Виктория', phone:'+7 701 555 66 77', stations:['st6','st7'] }
+    ],
+    stations: [],
+    shifts: [],       // {id, stationId, type, employeeName, employeePhone, tasks:[]}
+    merchChecklists: [], // {id, stationId, tasks:[]}
+    managerTasks: {},    // managerId -> tasks[]
+    headTasks: []
+  };
+
+  const stationSeed = [
+    ['АЗС №1','г. Алматы, пр. Райымбека, 12','mgr1','mc1'],
+    ['АЗС №2','г. Алматы, ул. Саина, 45','mgr1','mc1'],
+    ['АЗС №3','г. Алматы, трасса А2, 8 км','mgr1','mc1'],
+    ['АЗС №4','г. Алматы, ул. Момышулы, 101','mgr1','mc2'],
+    ['АЗС №5','г. Талдыкорган, трасса А3, 3 км','mgr2','mc2'],
+    ['АЗС №6','г. Талдыкорган, ул. Кабанбай батыра, 21','mgr2','mc3'],
+    ['АЗС №7','г. Есик, трасса А351, 15 км','mgr2','mc3']
+  ];
+
+  const shiftNames = [
+    'Ибраев Марат','Тулегенова Сая','Жунусов Азамат','Каримова Динара','Байжанов Ерлан',
+    'Нурлыбаева Асель','Сатпаев Алишер','Оразбекова Гульнара','Дюсенов Тимур','Абенова Жанна',
+    'Кенжебаев Санжар','Мукатова Айнур','Рахимов Бекзат','Утеулина Мадина'
+  ];
+  let nameIdx = 0;
+  function nextName(){ return shiftNames[nameIdx++ % shiftNames.length]; }
+  function seedPhone(){ return '+7 7' + randInt(10,29) + ' ' + randInt(100,999) + ' ' + randInt(10,99) + ' ' + randInt(10,99); }
+
+  stationSeed.forEach(([name,address,managerId,merchId],i)=>{
+    const st = { id:'st'+(i+1), name, address, managerId, merchId };
+    state.stations.push(st);
+
+    ['day','night'].forEach(type=>{
+      const shift = {
+        id: uid('sh'), stationId: st.id, type,
+        employeeName: nextName(), employeePhone: seedPhone(),
+        tasks: []
+      };
+      const deadlineBase = type==='day' ? 20 : 32; // hour offset window
+      shift.tasks = templates.shift.map(title => makeTask(title, {
+        offsetH: randInt(deadlineBase-30, deadlineBase),
+        responsibleName: shift.employeeName,
+        responsiblePhone: shift.employeePhone,
+        scopeLabel: st.name + ' · ' + (type==='day'?'дневная смена':'ночная смена')
+      }));
+      state.shifts.push(shift);
+    });
+
+    const mc = state.merchandisers.find(m=>m.id===st.merchId);
+    state.merchChecklists.push({
+      id: uid('mch'), stationId: st.id,
+      tasks: templates.merch.map(title => makeTask(title, {
+        responsibleName: mc ? mc.name : '',
+        responsiblePhone: mc ? mc.phone : '',
+        scopeLabel: st.name
+      }))
+    });
+  });
+
+  state.managers.forEach(mgr=>{
+    state.managerTasks[mgr.id] = templates.manager.map(title => makeTask(title, {
+      responsibleName: mgr.name, responsiblePhone: mgr.phone, scopeLabel: 'Зона: ' + mgr.stations.length + ' АЗС'
+    }));
+  });
+
+  state.headTasks = templates.head.map(title => makeTask(title, {
+    responsibleName: state.head.name, responsiblePhone: state.head.phone, scopeLabel: 'Сеть целиком'
+  }));
+
+  /* ---------- helpers over state ---------- */
+  function allChecklistGroups(){
+    // returns list of {type, controllerId, controllerName, controllerPhone, stationId, stationName, shiftType, tasks}
+    const groups = [];
+    state.shifts.forEach(sh=>{
+      const st = state.stations.find(s=>s.id===sh.stationId);
+      groups.push({
+        kind:'shift', tasks: sh.tasks, stationId: st.id, stationName: st.name,
+        shiftType: sh.type, controllerId: st.managerId,
+        employeeName: sh.employeeName, employeePhone: sh.employeePhone
+      });
+    });
+    state.merchChecklists.forEach(mch=>{
+      const st = state.stations.find(s=>s.id===mch.stationId);
+      groups.push({
+        kind:'merch', tasks: mch.tasks, stationId: st.id, stationName: st.name,
+        shiftType: null, controllerId: st.merchId,
+        employeeName: null, employeePhone: null
+      });
+    });
+    return groups;
+  }
+
+  function displayStatus(task){
+    const overdue = task.stage!=='closed' && new Date(task.deadline).getTime() < Date.now();
+    return overdue ? 'overdue' : task.stage;
+  }
+
+  function pct(closedCount, total){
+    return total===0 ? 0 : Math.round((closedCount/total)*100);
+  }
+
+  function stationCompletion(stationId){
+    const shiftTasks = state.shifts.filter(s=>s.stationId===stationId).flatMap(s=>s.tasks);
+    const merchTasks = (state.merchChecklists.find(m=>m.stationId===stationId)||{tasks:[]}).tasks;
+    const opPct = pct(shiftTasks.filter(t=>t.stage==='closed').length, shiftTasks.length);
+    const merchPct = pct(merchTasks.filter(t=>t.stage==='closed').length, merchTasks.length);
+    return {opPct, merchPct};
+  }
+
+  function allTasksFlat(){
+    let out = [];
+    state.shifts.forEach(s=> out = out.concat(s.tasks));
+    state.merchChecklists.forEach(m=> out = out.concat(m.tasks));
+    state.managers.forEach(mgr=> out = out.concat(state.managerTasks[mgr.id]||[]));
+    out = out.concat(state.headTasks);
+    return out;
+  }
+
+  function waLink(phone, task, scope){
+    if(!phone) return null;
+    const digits = phone.replace(/\D/g,'');
+    const status = STAGE_LABEL[displayStatus(task)];
+    const text = `Задача: ${task.title}\nСтанция/зона: ${scope||task.scopeLabel||'—'}\nОтветственный: ${task.responsibleName||'—'}\nСрок: ${fmtDT(task.deadline)}\nСтатус: ${status}`;
+    return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+  }
+
+  function advanceStage(task){
+    const idx = STAGES.indexOf(task.stage);
+    if(idx < STAGES.length-1){ task.stage = STAGES[idx+1]; }
+    renderAll();
+  }
+
+  /* ---------- rendering ---------- */
+  const $ = sel => document.querySelector(sel);
+
+  function renderTiles(){
+    const shiftTasks = state.shifts.flatMap(s=>s.tasks);
+    const merchTasks = state.merchChecklists.flatMap(m=>m.tasks);
+    const managerTasksAll = state.managers.flatMap(m=> state.managerTasks[m.id]||[]);
+    const headTasksAll = state.headTasks;
+    const allTasks = allTasksFlat();
+    const overdueCount = allTasks.filter(t=>displayStatus(t)==='overdue').length;
+
+    const tiles = [
+      {val: state.stations.length, lbl:'Станций в сети'},
+      {val: pct(shiftTasks.filter(t=>t.stage==='closed').length, shiftTasks.length)+'%', lbl:'Чек-лист состояния АЗС'},
+      {val: pct(merchTasks.filter(t=>t.stage==='closed').length, merchTasks.length)+'%', lbl:'Товароведческий контроль'},
+      {val: pct(managerTasksAll.filter(t=>t.stage==='closed').length, managerTasksAll.length)+'%', lbl:'Отчётность менеджеров'},
+      {val: pct(headTasksAll.filter(t=>t.stage==='closed').length, headTasksAll.length)+'%', lbl:'Заявки и поставщики'},
+      {val: overdueCount, lbl:'Просрочено задач по сети', warn:true}
+    ];
+    $('#tiles').innerHTML = tiles.map(t=>`
+      <div class="tile ${t.warn?'warn':''}">
+        <div class="val">${t.val}</div>
+        <div class="lbl">${t.lbl}</div>
+      </div>`).join('');
+  }
+
+  function renderStruct(){
+    const cards = [];
+    cards.push({role:'Начальник торгового отдела', name:state.head.name, phone:state.head.phone,
+      stations:'Курирует всех товароведов по сети (' + state.stations.length + ' АЗС)', onSave:v=>state.head.phone=v});
+    state.managers.forEach(m=>{
+      const names = m.stations.map(id=>(state.stations.find(s=>s.id===id)||{}).name).filter(Boolean).join(', ');
+      cards.push({role:'Менеджер', name:m.name, phone:m.phone, stations: names||'—', onSave:v=>m.phone=v});
+    });
+    state.merchandisers.forEach(m=>{
+      const names = m.stations.map(id=>(state.stations.find(s=>s.id===id)||{}).name).filter(Boolean).join(', ');
+      cards.push({role:'Товаровед', name:m.name, phone:m.phone, stations: names||'—', onSave:v=>m.phone=v});
+    });
+    $('#structCount').textContent = '(' + cards.length + ')';
+    $('#structGrid').innerHTML = cards.map((c,i)=>`
+      <div class="struct-card">
+        <div class="role">${c.role}</div>
+        <div class="name">${c.name}</div>
+        <div class="stations">${c.stations}</div>
+        <div class="phone-row">
+          <input type="text" value="${c.phone}" data-idx="${i}" class="struct-phone">
+          <button class="theme-btn" data-savephone="${i}" style="padding:6px 9px;">💾</button>
+        </div>
+      </div>`).join('');
+    cards.forEach((c,i)=>{
+      const btn = document.querySelector(`[data-savephone="${i}"]`);
+      if(btn) btn.addEventListener('click', ()=>{
+        const input = document.querySelector(`.struct-phone[data-idx="${i}"]`);
+        c.onSave(input.value.trim());
+        renderAll();
+      });
+    });
+  }
+
+  function miniTaskHTML(t){
+    const st = displayStatus(t);
+    return `<li class="mini-task">
+      <span class="t" title="${t.title}">${t.title}</span>
+      <span class="chip ${st}" data-taskid="${t.id}">${STAGE_LABEL[st]}</span>
+    </li>`;
+  }
+
+  function renderPeople(){
+    let html = '';
+    html += `<div class="person-card"><h3>🧭 ${state.head.name} — начальник торгового отдела</h3>
+      <ul>${state.headTasks.map(miniTaskHTML).join('')}</ul></div>`;
+    state.managers.forEach(m=>{
+      html += `<div class="person-card"><h3>🧑‍💼 ${m.name} — менеджер</h3>
+        <ul>${(state.managerTasks[m.id]||[]).map(miniTaskHTML).join('')}</ul></div>`;
+    });
+    $('#peopleGrid').innerHTML = html;
+    document.querySelectorAll('#peopleGrid .chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        const id = chip.getAttribute('data-taskid');
+        const task = allTasksFlat().find(t=>t.id===id);
+        if(task) advanceStage(task);
+      });
+    });
+  }
+
+  let chartView = 'chart';
+  function renderChart(){
+    const rows = state.stations.map(st=>{
+      const {opPct, merchPct} = stationCompletion(st.id);
+      return {name:st.name, opPct, merchPct, sum:opPct+merchPct};
+    }).sort((a,b)=>b.sum-a.sum);
+
+    $('#chartView').innerHTML = rows.map(r=>`
+      <div class="station-row">
+        <div>${r.name}</div>
+        <div class="bar-stack">
+          <div class="bar-track"><div class="bar-fill op" style="width:${r.opPct}%"></div></div>
+          <div class="bar-track"><div class="bar-fill merch" style="width:${r.merchPct}%"></div></div>
+        </div>
+        <div style="text-align:right; font-size:11.5px; color:var(--muted);">${r.opPct}%/${r.merchPct}%</div>
+      </div>`).join('');
+
+    $('#tableView').innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Станция</th><th>Состояние АЗС</th><th>Товароведческий</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.opPct}%</td><td>${r.merchPct}%</td></tr>`).join('')}</tbody>
+      </table>`;
+
+    $('#chartView').style.display = chartView==='chart' ? '' : 'none';
+    $('#tableView').style.display = chartView==='table' ? '' : 'none';
+    $('#viewChartBtn').classList.toggle('active', chartView==='chart');
+    $('#viewTableBtn').classList.toggle('active', chartView==='table');
+  }
+
+  function controllerOptions(){
+    const opts = [{id:'all', name:'Все'}];
+    opts.push({id:'head:1', name:'Начальник торгового отдела'});
+    state.managers.forEach(m=>opts.push({id:'mgr:'+m.id, name:'Менеджер: '+m.name}));
+    state.merchandisers.forEach(m=>opts.push({id:'mc:'+m.id, name:'Товаровед: '+m.name}));
+    return opts;
+  }
+
+  function populateFilterDropdowns(){
+    const fController = $('#fController');
+    const curController = fController.value || 'all';
+    fController.innerHTML = controllerOptions().map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+    fController.value = curController;
+
+    const fStation = $('#fStation');
+    const curStation = fStation.value || 'all';
+    fStation.innerHTML = '<option value="all">Все</option>' + state.stations.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    fStation.value = curStation;
+  }
+
+  function renderChecklist(){
+    populateFilterDropdowns();
+    const controller = $('#fController').value;
+    const stationF = $('#fStation').value;
+    const shiftF = $('#fShift').value;
+    const statusF = $('#fStatus').value;
+
+    let rows = []; // {task, scope, phone, name}
+    allChecklistGroups().forEach(g=>{
+      if(stationF!=='all' && g.stationId!==stationF) return;
+      if(g.kind==='shift'){
+        if(shiftF!=='all' && g.shiftType!==shiftF) return;
+        if(controller!=='all' && controller!==('mgr:'+g.controllerId)) return;
+        g.tasks.forEach(t=> rows.push({task:t, scope:g.stationName+' · '+(g.shiftType==='day'?'дневная':'ночная'), phone:g.employeePhone, name:g.employeeName}));
+      } else {
+        if(shiftF!=='all') return; // merch checklist has no shift
+        if(controller!=='all' && controller!==('mc:'+g.controllerId)) return;
+        g.tasks.forEach(t=> rows.push({task:t, scope:g.stationName, phone:t.responsiblePhone, name:t.responsibleName}));
+      }
+    });
+
+    if(controller==='all' || controller==='head:1'){
+      state.headTasks.forEach(t=> rows.push({task:t, scope:'Сеть (начальник торгового отдела)', phone:t.responsiblePhone, name:t.responsibleName}));
+    }
+    state.managers.forEach(m=>{
+      if(controller!=='all' && controller!==('mgr:'+m.id)) return;
+      (state.managerTasks[m.id]||[]).forEach(t=> rows.push({task:t, scope:'Менеджер: '+m.name, phone:t.responsiblePhone, name:t.responsibleName}));
+    });
+
+    rows = rows.filter(r=>{
+      const st = displayStatus(r.task);
+      if(statusF==='all') return true;
+      if(statusF==='closed') return st==='closed';
+      if(statusF==='overdue') return st==='overdue';
+      if(statusF==='active') return st!=='closed' && st!=='overdue';
+      return true;
+    });
+
+    $('#checklistCount').textContent = '(' + rows.length + ')';
+
+    if(rows.length===0){
+      $('#checklistList').innerHTML = '<div class="empty-note">Нет задач по выбранным фильтрам.</div>';
+      return;
+    }
+
+    $('#checklistList').innerHTML = rows.map(r=>{
+      const st = displayStatus(r.task);
+      const wa = waLink(r.phone, r.task, r.scope);
+      const tip = `Постановка: ${fmtDT(r.task.createdAt)}\nОтветственный: ${r.name||'—'}\nСрок: ${fmtDT(r.task.deadline)}`;
+      return `<div class="task-row" title="${tip}">
+        <span class="title">${r.task.title}</span>
+        <span class="meta">${r.scope}</span>
+        <span class="meta">до ${fmtDT(r.task.deadline)}</span>
+        <span class="chip ${st}" data-taskid="${r.task.id}">${STAGE_LABEL[st]}</span>
+        ${wa ? `<button type="button" class="wa-btn" data-walink="${encodeURIComponent(wa)}">💬 WhatsApp</button>` : ''}
+      </div>`;
+    }).join('');
+
+    document.querySelectorAll('#checklistList .chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        const id = chip.getAttribute('data-taskid');
+        const task = allTasksFlat().find(t=>t.id===id);
+        if(task) advanceStage(task);
+      });
+    });
+    document.querySelectorAll('#checklistList .wa-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        window.open(decodeURIComponent(btn.getAttribute('data-walink')), '_blank', 'noopener');
+      });
+    });
+  }
+
+  function populateFormDropdowns(){
+    const sfManager = $('#sf_manager');
+    sfManager.innerHTML = state.managers.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+    const sfMerch = $('#sf_merch');
+    sfMerch.innerHTML = state.merchandisers.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+
+    const hfStation = $('#hf_station');
+    const curHf = hfStation.value;
+    hfStation.innerHTML = state.stations.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    if(curHf) hfStation.value = curHf;
+
+    updateAssignPersonOptions();
+  }
+
+  function updateAssignPersonOptions(){
+    const role = $('#af_role').value;
+    const sel = $('#af_person');
+    let opts = [];
+    if(role==='shift'){
+      opts = state.shifts.map(s=>{
+        const st = state.stations.find(x=>x.id===s.stationId);
+        return {v:s.id, l:`${s.employeeName} (${st.name}, ${s.type==='day'?'день':'ночь'})`};
+      });
+    } else if(role==='merch'){
+      opts = state.merchandisers.map(m=>({v:m.id, l:m.name}));
+    } else if(role==='manager'){
+      opts = state.managers.map(m=>({v:m.id, l:m.name}));
+    } else {
+      opts = [{v:'head', l:state.head.name}];
+    }
+    sel.innerHTML = opts.map(o=>`<option value="${o.v}">${o.l}</option>`).join('');
+  }
+
+  function defaultDeadlineLocal(){
+    const d = addHours(new Date(), 24);
+    const pad = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  /* ---------- master render ---------- */
+  function renderAll(){
+    renderTiles();
+    renderStruct();
+    renderPeople();
+    renderChart();
+    renderChecklist();
+    populateFormDropdowns();
+  }
+
+  /* ---------- form handlers ---------- */
+  $('#af_role').addEventListener('change', updateAssignPersonOptions);
+
+  $('#assignForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const role = $('#af_role').value;
+    const personId = $('#af_person').value;
+    const title = $('#af_title').value.trim();
+    const deadlineVal = $('#af_deadline').value;
+    if(!title || !deadlineVal){ return; }
+    const deadlineISO = new Date(deadlineVal).toISOString();
+
+    let target, scopeLabel, respName, respPhone;
+    if(role==='shift'){
+      target = state.shifts.find(s=>s.id===personId);
+      const st = state.stations.find(x=>x.id===target.stationId);
+      scopeLabel = st.name + ' · ' + (target.type==='day'?'дневная смена':'ночная смена');
+      respName = target.employeeName; respPhone = target.employeePhone;
+    } else if(role==='merch'){
+      const m = state.merchandisers.find(x=>x.id===personId);
+      const mch = state.merchChecklists.find(x=> m.stations.includes(x.stationId)) || state.merchChecklists[0];
+      target = mch; scopeLabel = 'Товаровед: ' + m.name; respName = m.name; respPhone = m.phone;
+    } else if(role==='manager'){
+      target = { tasks: state.managerTasks[personId] };
+      const m = state.managers.find(x=>x.id===personId);
+      scopeLabel = 'Менеджер: ' + m.name; respName = m.name; respPhone = m.phone;
+    } else {
+      target = { tasks: state.headTasks };
+      scopeLabel = 'Начальник торгового отдела'; respName = state.head.name; respPhone = state.head.phone;
+    }
+
+    const task = makeTask(title, {
+      stage:'control', offsetH:0, responsibleName:respName, responsiblePhone:respPhone, scopeLabel
+    });
+    task.deadline = deadlineISO;
+    task.createdAt = nowISO();
+    target.tasks.push(task);
+
+    $('#af_msg').textContent = '✔ Задача поставлена: «' + title + '»';
+    $('#af_title').value = '';
+    renderAll();
+    $('#af_deadline').value = defaultDeadlineLocal();
+  });
+
+  $('#stationForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const name = $('#sf_name').value.trim();
+    const address = $('#sf_address').value.trim();
+    const managerId = $('#sf_manager').value;
+    const merchId = $('#sf_merch').value;
+    if(!name || !address) return;
+    const id = uid('st');
+    const st = {id, name, address, managerId, merchId};
+    state.stations.push(st);
+    state.managers.find(m=>m.id===managerId).stations.push(id);
+    state.merchandisers.find(m=>m.id===merchId).stations.push(id);
+    state.merchChecklists.push({
+      id: uid('mch'), stationId:id,
+      tasks: templates.merch.map(title=>makeTask(title,{
+        responsibleName: state.merchandisers.find(m=>m.id===merchId).name,
+        responsiblePhone: state.merchandisers.find(m=>m.id===merchId).phone,
+        scopeLabel: name
+      }))
+    });
+    $('#sf_msg').textContent = '✔ Станция «' + name + '» добавлена';
+    e.target.reset();
+    renderAll();
+  });
+
+  $('#shiftForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const stationId = $('#hf_station').value;
+    const type = $('#hf_type').value;
+    const employeeName = $('#hf_name').value.trim();
+    const employeePhone = $('#hf_phone').value.trim();
+    if(!stationId || !employeeName || !employeePhone) return;
+    const st = state.stations.find(s=>s.id===stationId);
+    const endOfShift = addHours(new Date(), type==='day' ? 12 : 12);
+    const shift = {
+      id: uid('sh'), stationId, type, employeeName, employeePhone,
+      tasks: templates.shift.map(title=>makeTask(title,{
+        stage:'control', offsetH:0,
+        responsibleName: employeeName, responsiblePhone: employeePhone,
+        scopeLabel: st.name + ' · ' + (type==='day'?'дневная смена':'ночная смена')
+      }))
+    };
+    shift.tasks.forEach(t=>{ t.deadline = endOfShift.toISOString(); t.createdAt = nowISO(); });
+    state.shifts.push(shift);
+    $('#hf_msg').textContent = '✔ Смена добавлена, срок задач — конец смены (' + fmtDT(endOfShift.toISOString()) + ')';
+    e.target.reset();
+    renderAll();
+  });
+
+  $('#templateForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const type = $('#tf_type').value;
+    const title = $('#tf_title').value.trim();
+    if(!title) return;
+    templates[type].push(title);
+
+    let count = 0;
+    if(type==='shift'){
+      state.shifts.forEach(sh=>{
+        const st = state.stations.find(s=>s.id===sh.stationId);
+        sh.tasks.push(makeTask(title,{stage:'control', offsetH:24,
+          responsibleName: sh.employeeName, responsiblePhone: sh.employeePhone,
+          scopeLabel: st.name + ' · ' + (sh.type==='day'?'дневная смена':'ночная смена')}));
+        count++;
+      });
+    } else if(type==='merch'){
+      state.merchChecklists.forEach(mch=>{
+        const st = state.stations.find(s=>s.id===mch.stationId);
+        const mc = state.merchandisers.find(m=>m.id===st.merchId);
+        mch.tasks.push(makeTask(title,{stage:'control', offsetH:24,
+          responsibleName: mc?mc.name:'', responsiblePhone: mc?mc.phone:'', scopeLabel: st.name}));
+        count++;
+      });
+    } else if(type==='manager'){
+      state.managers.forEach(m=>{
+        state.managerTasks[m.id].push(makeTask(title,{stage:'control', offsetH:24,
+          responsibleName:m.name, responsiblePhone:m.phone, scopeLabel:'Менеджер: '+m.name}));
+        count++;
+      });
+    } else {
+      state.headTasks.push(makeTask(title,{stage:'control', offsetH:24,
+        responsibleName: state.head.name, responsiblePhone: state.head.phone, scopeLabel:'Сеть целиком'}));
+      count++;
+    }
+
+    $('#tf_msg').textContent = `✔ Задача добавлена в шаблон и создана в ${count} записях`;
+    e.target.reset();
+    renderAll();
+  });
+
+  $('#viewChartBtn').addEventListener('click', ()=>{ chartView='chart'; renderChart(); });
+  $('#viewTableBtn').addEventListener('click', ()=>{ chartView='table'; renderChart(); });
+
+  ['fController','fStation','fShift','fStatus'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', renderChecklist);
+  });
+
+  /* ---------- theme ---------- */
+  const themeBtn = $('#themeToggle');
+  function applyTheme(t){
+    document.documentElement.setAttribute('data-theme', t);
+    themeBtn.textContent = t==='dark' ? '☀️ Светлая тема' : '🌙 Тёмная тема';
+    localStorage.setItem('azs-theme', t);
+  }
+  const savedTheme = localStorage.getItem('azs-theme') ||
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
+  applyTheme(savedTheme);
+  themeBtn.addEventListener('click', ()=>{
+    applyTheme(document.documentElement.getAttribute('data-theme')==='dark' ? 'light':'dark');
+  });
+
+  /* ---------- init ---------- */
+  $('#af_deadline').value = defaultDeadlineLocal();
+  renderAll();
+
+  /* refresh overdue statuses periodically without full re-render churn */
+  setInterval(renderAll, 60000);
+})();
+</script>
+</body>
+</html>
