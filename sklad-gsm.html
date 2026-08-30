@@ -176,23 +176,84 @@
   .journal-empty{color:var(--muted); padding:16px 0; text-align:center; font-size:13px;}
 
   footer{text-align:center; color:var(--muted); font-size:11.5px; padding:20px 0 30px;}
+
+  .login-overlay{
+    position:fixed; inset:0; background:var(--bg); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .login-overlay.hidden{display:none;}
+  .login-box{
+    width:100%; max-width:340px; background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:24px; box-shadow:var(--shadow);
+  }
+  .login-box h1{font-size:18px; margin:0 0 4px;}
+  .login-box .sub{color:var(--muted); font-size:12.5px; margin-bottom:18px;}
+  .login-box label{display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--muted); margin-bottom:12px;}
+  .login-box input{width:100%;}
+  .login-box button{
+    width:100%; margin-top:6px; background:var(--accent); color:#0f1418; border:none;
+    border-radius:9px; padding:10px; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .login-box button:hover{background:var(--accent-2);}
+  .login-error{color:var(--danger); font-size:12.5px; min-height:16px; margin-top:2px;}
+  .login-hint{color:var(--muted); font-size:11.5px; margin-top:14px; line-height:1.5;}
+
+  .app-hidden{display:none !important;}
+  .user-bar{display:flex; align-items:center; gap:10px;}
+  .user-bar .role-pill{
+    font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;
+  }
+  .user-bar .role-pill.admin{background:var(--in-bg); color:var(--in);}
+  .user-bar .role-pill.viewer{background:var(--panel-2); color:var(--muted);}
+  .user-bar .logout-btn{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:7px 12px; cursor:pointer; font-size:12.5px;
+  }
+  .viewer-note{color:var(--muted); font-size:12.5px; padding:8px 0;}
+  fieldset[disabled]{opacity:.5;}
 </style>
 </head>
 <body>
 
-<header class="topbar">
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h1>⛽ Склад ГСМ</h1>
+    <div class="sub">Вход в систему учёта</div>
+    <form id="loginForm">
+      <label>Логин
+        <input type="text" id="loginUser" autocomplete="username" required>
+      </label>
+      <label>Пароль
+        <input type="password" id="loginPass" autocomplete="current-password" required>
+      </label>
+      <div class="login-error" id="loginError"></div>
+      <button type="submit">Войти</button>
+    </form>
+    <div class="login-hint">Администратор — полный доступ (приход/расход, редактирование).<br>Просмотр — только чтение журнала и отчётов.</div>
+  </div>
+</div>
+
+<header class="topbar app-hidden" id="topbar">
   <div>
     <h1>⛽ Склад ГСМ</h1>
     <div class="sub">Учёт прихода и расхода нефтепродуктов</div>
   </div>
+  <div class="user-bar">
+    <span class="role-pill" id="rolePill"></span>
+    <button class="logout-btn" id="logoutBtn" type="button">Выйти</button>
+  </div>
 </header>
 
-<main>
+<main class="app-hidden" id="mainApp">
   <div id="banner" class="banner-critical">⚠️ <span id="bannerText"></span></div>
 
   <section class="tanks" id="tanks"></section>
 
-  <section class="forms-row">
+  <section class="panel viewer-note app-hidden" id="viewerNote">
+    Режим просмотра: внесение прихода/расхода и изменение настроек резервуаров доступны только администратору.
+  </section>
+
+  <section class="forms-row" id="formsRow">
     <form class="panel op-form in" id="formIn">
       <h2 style="color:var(--in)">➕ Приход НП</h2>
       <div class="fields">
@@ -343,6 +404,40 @@
     dt:  {capacity:15000, deadLevel:800}
   };
 
+  // ---------- auth ----------
+  // NOTE: это статичный HTML-файл без сервера — пароли ниже видны любому,
+  // кто откроет исходный код страницы. Это UI-разграничение ролей
+  // (не допустить случайного изменения данных просмотрщиком), а не защита
+  // от того, кто намеренно хочет обойти вход. Смените логины/пароли здесь
+  // при необходимости.
+  var AUTH_USERS = {
+    "admin":  {password:"admin",  role:"admin",  label:"Администратор"},
+    "viewer": {password:"viewer", role:"viewer", label:"Просмотр"}
+  };
+  var STORAGE_AUTH = "sklad_gsm_v1_auth";
+  var currentUser = null; // {username, role, label}
+
+  function isAdmin(){
+    return !!currentUser && currentUser.role === "admin";
+  }
+  function loadAuth(){
+    try{
+      var raw = localStorage.getItem(STORAGE_AUTH);
+      if(!raw) return null;
+      var parsed = JSON.parse(raw);
+      if(parsed && AUTH_USERS[parsed.username] && AUTH_USERS[parsed.username].role === parsed.role){
+        return parsed;
+      }
+      return null;
+    }catch(e){ return null; }
+  }
+  function saveAuth(user){
+    localStorage.setItem(STORAGE_AUTH, JSON.stringify(user));
+  }
+  function clearAuth(){
+    localStorage.removeItem(STORAGE_AUTH);
+  }
+
   // ---------- state ----------
   var operations = loadOperations();
   var settings = loadSettings();
@@ -456,13 +551,14 @@
         '<div class="volume">' + fmtNum(stock) + ' <small>л</small></div>' +
         '<div class="gauge"><div style="width:' + pct.toFixed(1) + '%"></div></div>' +
         '<div class="settings-row">' +
-          '<label>Вместимость, л<input type="number" min="1" step="1" data-role="capacity" value="' + s.capacity + '"></label>' +
-          '<label>Мёртвый остаток, л<input type="number" min="0" step="1" data-role="deadlevel" value="' + s.deadLevel + '"></label>' +
+          '<label>Вместимость, л<input type="number" min="1" step="1" data-role="capacity" value="' + s.capacity + '"' + (isAdmin() ? '' : ' disabled') + '></label>' +
+          '<label>Мёртвый остаток, л<input type="number" min="0" step="1" data-role="deadlevel" value="' + s.deadLevel + '"' + (isAdmin() ? '' : ' disabled') + '></label>' +
         '</div>';
 
       var capInput = el.querySelector('[data-role="capacity"]');
       var deadInput = el.querySelector('[data-role="deadlevel"]');
       capInput.addEventListener("change", function(){
+        if(!isAdmin()) return;
         var v = parseFloat(capInput.value);
         if(!isNaN(v) && v > 0){
           settings[f.key].capacity = v;
@@ -471,6 +567,7 @@
         }
       });
       deadInput.addEventListener("change", function(){
+        if(!isAdmin()) return;
         var v = parseFloat(deadInput.value);
         if(!isNaN(v) && v >= 0){
           settings[f.key].deadLevel = v;
@@ -500,6 +597,7 @@
 
     form.addEventListener("submit", function(e){
       e.preventDefault();
+      if(!isAdmin()) return;
       var fd = new FormData(form);
       var date = fd.get("date");
       var fuel = fd.get("fuel");
@@ -604,7 +702,7 @@
         '<td><span class="fuel-tag ' + o.fuel + '">' + FUEL_LABEL[o.fuel] + '</span></td>' +
         '<td>' + fmtNum(o.volume) + '</td>' +
         '<td>' + escapeHtml(o.party) + '</td>' +
-        '<td><button class="del-btn" data-id="' + o.id + '">Удалить</button></td>';
+        '<td>' + (isAdmin() ? '<button class="del-btn" data-id="' + o.id + '">Удалить</button>' : '') + '</td>';
       journalBody.appendChild(tr);
     });
 
@@ -743,6 +841,56 @@
     XLSX.writeFile(wb, filename);
   }
 
+  // ---------- role-based UI ----------
+  function applyRolePermissions(){
+    document.getElementById("formsRow").classList.toggle("app-hidden", !isAdmin());
+    document.getElementById("viewerNote").classList.toggle("app-hidden", isAdmin());
+    var pill = document.getElementById("rolePill");
+    pill.textContent = currentUser.label;
+    pill.className = "role-pill " + currentUser.role;
+  }
+
+  // ---------- login / logout ----------
+  var loginOverlay = document.getElementById("loginOverlay");
+  var loginForm = document.getElementById("loginForm");
+  var loginError = document.getElementById("loginError");
+  var topbar = document.getElementById("topbar");
+  var mainApp = document.getElementById("mainApp");
+
+  function showApp(){
+    loginOverlay.classList.add("hidden");
+    topbar.classList.remove("app-hidden");
+    mainApp.classList.remove("app-hidden");
+    applyRolePermissions();
+    renderTanks();
+    renderJournal();
+    renderDayReport();
+  }
+
+  loginForm.addEventListener("submit", function(e){
+    e.preventDefault();
+    var username = document.getElementById("loginUser").value.trim();
+    var password = document.getElementById("loginPass").value;
+    var acc = AUTH_USERS[username];
+    if(!acc || acc.password !== password){
+      loginError.textContent = "Неверный логин или пароль.";
+      return;
+    }
+    currentUser = {username:username, role:acc.role, label:acc.label};
+    saveAuth(currentUser);
+    loginError.textContent = "";
+    loginForm.reset();
+    showApp();
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", function(){
+    clearAuth();
+    currentUser = null;
+    topbar.classList.add("app-hidden");
+    mainApp.classList.add("app-hidden");
+    loginOverlay.classList.remove("hidden");
+  });
+
   // ---------- init ----------
   dayDateEl.value = todayIso();
   dayDateEl.addEventListener("change", renderDayReport);
@@ -750,9 +898,11 @@
   initForm("formIn", "in");
   initForm("formOut", "out");
 
-  renderTanks();
-  renderJournal();
-  renderDayReport();
+  var savedAuth = loadAuth();
+  if(savedAuth){
+    currentUser = {username:savedAuth.username, role:savedAuth.role, label:AUTH_USERS[savedAuth.username].label};
+    showApp();
+  }
 })();
 </script>
 </body>
